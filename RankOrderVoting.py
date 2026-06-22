@@ -1,5 +1,6 @@
 import csv
 import sys
+import copy
 
 """Helper Functions"""
 def flexibleContains(contain1: str, contain2: str):
@@ -22,7 +23,11 @@ def flexibleContains(contain1: str, contain2: str):
         shortContain = contain1
         longContain = contain2
 
-    return isinstance(contain1, str) and isinstance(contain2, str) and simplifyString(shortContain) in simplifyString(longContain)
+    areStrings: bool = isinstance(contain1, str) and isinstance(contain2, str)
+    doContain: bool = simplifyString(shortContain) in simplifyString(longContain)
+    areNotEmpty: bool = not shortContain == "" and not longContain == ""
+
+    return areStrings and doContain and areNotEmpty
 
 def simplifyString(string: str):
     return string.lower().strip()
@@ -46,6 +51,7 @@ def getAndCheckStringInput(toCheck: list[str]):
     isValid: bool = False
     for test in toCheck:
         if flexibleContains(user_input, test):
+            print()
             return user_input
     
     print("Invalid input. Please try again.")
@@ -112,7 +118,7 @@ class Candidate:
         return simplifyString(self.name) == simplifyString(other.name)
     
     def __str__(self):
-        return self.name + ", currentVotes: " + str(self.currentVotes) + ", borda: " + str(self.borda)
+        return self.name
     def __repr__(self): return self.__str__()
 
 """Actionable Functions"""
@@ -126,12 +132,13 @@ def intro():
     print(INTRODUCTION)
 
 FILE_ENTRY_INSTRUCTIONS = "Input the address of the CSV file with the election data. Do not include any additional text or spaces."
-def getCSV() -> list[list]]:
+def getCSV() -> list[list]:
     """
     asks the user for the address of the CSV file with the voting data; if they do not input a valid address, it will repeatedly ask for input until a valid address is given; returns 2D array of the data in the CSV file when a valid address is given
     """
 
     print(FILE_ENTRY_INSTRUCTIONS)
+    
     stringInput = getAndCheckStringInput([".csv"]) # checks if the input is a string and contains ".csv"
 
     csvFile = []
@@ -159,7 +166,8 @@ def getPositions():
     """
 
     print(GIVE_POSITIONS_SPIEL)
-    positionInput = getAndCheckStringInput([","])
+    
+    positionInput = getAndCheckStringInput([",", ";"])
 
     positions = [] # an array of the positions being voted on, as Position objects
     
@@ -176,7 +184,7 @@ def getPositions():
 
     return positions
 
-def setUpForVoting(csv: list[list[str]], positions: list[Position]):
+def setUpForVoting(csv: list[list], positions: list[Position]):
     """
     ONLY RUN ONCE PER CSV (2D list)
 
@@ -209,29 +217,30 @@ def setUpForVoting(csv: list[list[str]], positions: list[Position]):
     for position in positions:
         # converts the large strings containing the rankings from each voter into arrays containing each candidate in order
         for row in csv:
-            row[position.indexInCSV] = row[position.indexInCSV].split(";") # type: ignore
+            row[position.indexInCSV] = row[position.indexInCSV].split(";")
 
-            try: row[position.indexInCSV].remove("") # type: ignore
-            except ValueError: print("bro?!?") # this is just a filler, it will probably never happen, but I just need something in the except
+            try: row[position.indexInCSV].remove("")
+            except ValueError: print("bro?!?") # this is just a filler, it will probably never happen, but I just need something in the except block
 
             position.originalVotes.append(row[position.indexInCSV])
 
-        # print(position.name + "'s original votes is " + position.originalVotes.__str__())
-
-        position.mutableVotes = position.originalVotes.copy()
+        position.mutableVotes = copy.deepcopy(position.originalVotes)
 
         position.updateCandidates()
 
-        # print(position.candidates)
+    calculateBorda(positions)
 
-    calculateBorda(csv, positions)
-
-def calculateBorda(csv: list[list], positions: list[Position]):
+def calculateBorda(positions: list[Position]):
     """
     calculates and sets borda counts for each candidate for each position; do not run before setUpForVoting
     """
+    if(positions is Position):
+        return calculateBorda([positions])
+
     for position in positions:
         for candidate in position.candidates:
+            candidate.borda = 0
+
             for vote in position.mutableVotes:
                 candidate.borda += len(vote) - vote.index(candidate.name)
                 """
@@ -260,8 +269,6 @@ def positionElection(csv: list[list], position: Position) -> list[Candidate]:
     if(len(position.winningCandidates) <= position.numPossibleWinners):
         return position.winningCandidates
 
-    print("Winning Candidates for " + position.name + " is/are: " + position.winningCandidates.__str__())
-
     isItFirstRound: bool = (position.candidates == position.winningCandidates)
     
     candidatesToEliminate: list[Candidate] = [Candidate("placeholder")]
@@ -272,8 +279,6 @@ def positionElection(csv: list[list], position: Position) -> list[Candidate]:
         for vote in position.mutableVotes:
             if(flexibleContains(vote[0],candidate.name)):
                 candidate.currentVotes += 1
-
-        # print(candidate.name + " received " + str(candidate.currentVotes) + " votes")
         
         # if it is the first iteration, save the candidate's currentVotes as also being their first-choice votes
         if(isItFirstRound): candidate.firstCycleVotes = candidate.currentVotes
@@ -299,7 +304,6 @@ def positionElection(csv: list[list], position: Position) -> list[Candidate]:
     position.winningCandidates.remove(candidateToRemove)
 
     for vote in position.mutableVotes:
-        # print(vote)
         vote.remove(candidateToRemove.name)
 
     return positionElection(csv, position)
@@ -344,15 +348,19 @@ def checkMultiPositionWinners(csv: list[list], positions: list[Position]):
     else: recalculatePosition = positionsWereWon[0]
 
     recalculatePosition.disallowedVotes.append(winnerOfMultiplePositions.name)
-    recalculatePosition.mutableVotes = recalculatePosition.originalVotes.copy()
+    recalculatePosition.mutableVotes = copy.deepcopy(recalculatePosition.originalVotes)
 
     for vote in recalculatePosition.mutableVotes:
         for disallowedVote in recalculatePosition.disallowedVotes:
             vote.remove(disallowedVote)
     recalculatePosition.updateCandidates()
+    calculateBorda([recalculatePosition])
 
     newResult: list[Candidate] = positionElection(csv, recalculatePosition)
-    # print("The new winner of " + recalculatePosition.name + " is:" + newResult[0].name)
+    
+    print("The new winner(s) of " + recalculatePosition.name + " is/are: " + newResult.__str__())
+    print()
+
 
     return checkMultiPositionWinners(csv, positions)
 
@@ -385,9 +393,7 @@ runVoting(csvArray, positions)
 
 checkMultiPositionWinners(csvArray, positions)
 
-
-
-
+# mostly accurate pseudocode
 """
 1. get CSV file from user
 
