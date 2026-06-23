@@ -123,13 +123,14 @@ class Candidate:
 
 """Actionable Functions"""
 
-# the intro and instructions for the user, greeting them and asking them to input the address for the CSV file with teh voting data
-INTRODUCTION = "This is the Rank Order Voting Election script!\nIt is designed to process data from a CSV file exported and converted from a Microsoft Forms\nSpecifically, it is designed to process data from \"ranking\" questions."
+# the intro and instructions for the user, greeting them and asking them to input the address for the CSV file with the voting data
+INTRODUCTION = "This is the Rank Order Voting Election script!\nIt is designed to process data from a CSV file exported and converted from a Microsoft Forms\nSpecifically, it is designed to use data from \"Ranking\" questions to calculate election outcomes through an Instant-Runoff Voting (IRV) system."
 def intro():
     """
     prints the introduction
     """
     print(INTRODUCTION)
+    print()
 
 FILE_ENTRY_INSTRUCTIONS = "Input the address of the CSV file with the election data. Do not include any additional text or spaces."
 def getCSV() -> list[list]:
@@ -381,6 +382,8 @@ def printWinners(positions: list[Position]):
     
 
 """Main Code"""
+
+intro()
 
 csvArray: list[list] = getCSV()
 
